@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marks Entry - CampusHub</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside id="sidebar"></aside>
+  <main class="content">
+    <div class="topbar">
+      <h1>Marks entry</h1>
+      <p class="muted">Pick a subject and exam type, then enter each student's score.</p>
+    </div>
+
+    <div class="card">
+      <form id="loadForm" class="inline-form">
+        <input type="text" id="subject" placeholder="Subject" required>
+        <select id="examType" required>
+          <option value="Mid Term">Mid Term</option>
+          <option value="Final">Final</option>
+          <option value="Assignment">Assignment</option>
+          <option value="Quiz">Quiz</option>
+        </select>
+        <button type="submit" class="btn btn-primary">Load students</button>
+      </form>
+    </div>
+
+    <div id="alert" class="alert hidden"></div>
+
+    <div class="card hidden" id="marksCard">
+      <h3 id="marksTitle">Marks</h3>
+      <div class="marks-row header">
+        <div>Student</div><div>Obtained</div><div>Total</div><div></div>
+      </div>
+      <div id="marksList"></div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+  const user = requireAuth(['tutor']);
+  renderSidebar('tutor');
+
+  let currentSubject = '';
+  let currentExamType = '';
+
+  (async () => {
+    try {
+      const me = await api('/auth/me');
+      if (me.profile && me.profile.subject) document.getElementById('subject').value = me.profile.subject;
+    } catch (err) { /* non-fatal */ }
+  })();
+
+  document.getElementById('loadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideAlert('alert');
+    currentSubject = document.getElementById('subject').value.trim();
+    currentExamType = document.getElementById('examType').value;
+    try {
+      const [students, existingMarks] = await Promise.all([
+        api('/students'),
+        api(`/marks?subject=${encodeURIComponent(currentSubject)}`)
+      ]);
+      renderRows(students, existingMarks.filter((m) => m.examType === currentExamType));
+    } catch (err) {
+      showAlert('alert', err.message);
+    }
+  });
+
+  function renderRows(students, marksForExam) {
+    document.getElementById('marksTitle').textContent = `${currentSubject} · ${currentExamType} · ${students.length} students`;
+    const list = document.getElementById('marksList');
+
+    if (!students.length) {
+      list.innerHTML = '<div class="empty-state"><span class="empty-icon">☻</span>No students found in your department.</div>';
+      document.getElementById('marksCard').classList.remove('hidden');
+      return;
+    }
+
+    list.innerHTML = students.map((s) => {
+      const existing = marksForExam.find((m) => m.studentId === s.id);
+      return `
+      <div class="marks-row" data-student="${s.id}">
+        <div>${s.name} <span class="roster-meta">${s.rollNo}</span></div>
+        <input type="number" min="0" id="obt-${s.id}" value="${existing ? existing.marksObtained : ''}" placeholder="0">
+        <input type="number" min="1" id="tot-${s.id}" value="${existing ? existing.totalMarks : 100}">
+        <button class="btn btn-ghost" style="padding:6px 10px;" onclick="saveRow(${s.id}, this)">Save</button>
+      </div>`;
+    }).join('');
+
+    document.getElementById('marksCard').classList.remove('hidden');
+  }
+
+  async function saveRow(studentId, btn) {
+    const marksObtained = document.getElementById(`obt-${studentId}`).value;
+    const totalMarks = document.getElementById(`tot-${studentId}`).value;
+    if (marksObtained === '' || totalMarks === '') {
+      alert('Enter both marks obtained and total marks.');
+      return;
+    }
+    const original = btn.textContent;
+    btn.textContent = '...';
+    btn.disabled = true;
+    try {
+      await api('/marks', {
+        method: 'POST',
+        body: { studentId, subject: currentSubject, examType: currentExamType, marksObtained: Number(marksObtained), totalMarks: Number(totalMarks) }
+      });
+      btn.textContent = 'Saved ✓';
+      setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1500);
+    } catch (err) {
+      alert(err.message);
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>

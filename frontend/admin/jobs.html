@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Placement Jobs - CampusHub</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside id="sidebar"></aside>
+  <main class="content">
+    <div class="topbar">
+      <h1>Placement jobs</h1>
+      <p class="muted">Post openings and track who has applied, been shortlisted, or selected.</p>
+    </div>
+
+    <div class="card">
+      <h3>Post a new job</h3>
+      <div id="alert" class="alert hidden"></div>
+      <form id="jobForm">
+        <div class="grid-2">
+          <div>
+            <label>Job title</label>
+            <input type="text" id="title" required>
+            <label>Company</label>
+            <input type="text" id="company" required>
+            <label>Department eligibility</label>
+            <select id="department">
+              <option value="All">All departments</option>
+            </select>
+          </div>
+          <div>
+            <label>Application deadline</label>
+            <input type="date" id="deadline" required>
+            <label>Other eligibility criteria</label>
+            <input type="text" id="eligibility" placeholder="e.g. Minimum 60% aggregate">
+            <label>Description</label>
+            <textarea id="description" rows="2" placeholder="Brief role description"></textarea>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:14px;">Post job</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Open positions</h3>
+      <table class="table">
+        <thead><tr><th>Title</th><th>Company</th><th>Dept</th><th>Deadline</th><th class="num">Applicants</th><th>Actions</th></tr></thead>
+        <tbody id="jobsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card hidden" id="applicantsCard">
+      <h3 id="applicantsTitle">Applicants</h3>
+      <table class="table">
+        <thead><tr><th>Student</th><th>Roll No.</th><th>Dept</th><th>Status</th><th>Update</th></tr></thead>
+        <tbody id="applicantsBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+  requireAuth(['admin']);
+  renderSidebar('admin');
+
+  let jobsCache = [];
+
+  async function loadDepartmentOptions() {
+    const depts = await api('/departments');
+    document.getElementById('department').insertAdjacentHTML(
+      'beforeend',
+      depts.map((d) => `<option value="${d.code}">${d.name} (${d.code})</option>`).join('')
+    );
+  }
+
+  async function loadJobs() {
+    jobsCache = await api('/jobs');
+    const tbody = document.getElementById('jobsBody');
+    tbody.innerHTML = jobsCache.length
+      ? jobsCache.map((j) => `
+        <tr>
+          <td>${j.title}</td>
+          <td>${j.company}</td>
+          <td><span class="badge">${j.department}</span></td>
+          <td class="num">${formatDate(j.deadline)}</td>
+          <td class="num"><a href="#" onclick="viewApplicants(${j.id}); return false;">view</a></td>
+          <td><button class="btn-icon" title="Delete" onclick="deleteJob(${j.id})">✕</button></td>
+        </tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty-state"><span class="empty-icon">✦</span>No jobs posted yet.</div></td></tr>';
+  }
+
+  document.getElementById('jobForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideAlert('alert');
+    try {
+      await api('/jobs', {
+        method: 'POST',
+        body: {
+          title: document.getElementById('title').value.trim(),
+          company: document.getElementById('company').value.trim(),
+          department: document.getElementById('department').value,
+          deadline: document.getElementById('deadline').value,
+          eligibility: document.getElementById('eligibility').value.trim(),
+          description: document.getElementById('description').value.trim()
+        }
+      });
+      e.target.reset();
+      loadJobs();
+    } catch (err) {
+      showAlert('alert', err.message);
+    }
+  });
+
+  async function deleteJob(id) {
+    if (!confirm('Delete this job posting and all its applications?')) return;
+    try {
+      await api(`/jobs/${id}`, { method: 'DELETE' });
+      document.getElementById('applicantsCard').classList.add('hidden');
+      loadJobs();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  const STATUS_OPTIONS = ['applied', 'shortlisted', 'selected', 'rejected'];
+
+  async function viewApplicants(jobId) {
+    const job = jobsCache.find((j) => j.id === jobId);
+    const apps = await api(`/jobs/${jobId}/applications`);
+    document.getElementById('applicantsTitle').textContent = `Applicants - ${job.title} at ${job.company}`;
+    document.getElementById('applicantsBody').innerHTML = apps.length
+      ? apps.map((a) => `
+        <tr>
+          <td>${a.student.name}</td>
+          <td class="num">${a.student.rollNo}</td>
+          <td><span class="badge">${a.student.department}</span></td>
+          <td><span class="stamp ${a.status}">${a.status}</span></td>
+          <td>
+            <select onchange="updateStatus(${a.id}, this.value, ${jobId})">
+              ${STATUS_OPTIONS.map((s) => `<option value="${s}" ${s === a.status ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" class="muted">No applications yet.</td></tr>';
+    document.getElementById('applicantsCard').classList.remove('hidden');
+    document.getElementById('applicantsCard').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  async function updateStatus(appId, status, jobId) {
+    try {
+      await api(`/jobs/applications/${appId}`, { method: 'PUT', body: { status } });
+      viewApplicants(jobId);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  (async () => {
+    try {
+      await loadDepartmentOptions();
+      await loadJobs();
+    } catch (err) {
+      showAlert('alert', err.message);
+    }
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Placements - CampusHub</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside id="sidebar"></aside>
+  <main class="content">
+    <div class="topbar">
+      <h1>Placements</h1>
+      <p class="muted">Open job postings from companies visiting your college.</p>
+    </div>
+
+    <div class="card">
+      <h3>Open positions</h3>
+      <table class="table">
+        <thead><tr><th>Title</th><th>Company</th><th>Eligibility</th><th>Deadline</th><th>Action</th></tr></thead>
+        <tbody id="jobsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>My applications</h3>
+      <table class="table">
+        <thead><tr><th>Job</th><th>Company</th><th>Applied on</th><th>Status</th></tr></thead>
+        <tbody id="appsBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+  requireAuth(['student']);
+  renderSidebar('student');
+
+  async function loadAll() {
+    const [jobs, myApps] = await Promise.all([api('/jobs'), api('/jobs/applications/my')]);
+    const appliedJobIds = new Set(myApps.map((a) => a.jobId));
+
+    document.getElementById('jobsBody').innerHTML = jobs.length
+      ? jobs.map((j) => `
+        <tr>
+          <td>${j.title}</td>
+          <td>${j.company}</td>
+          <td class="muted">${j.eligibility}${j.department !== 'All' ? ` · <span class="badge">${j.department}</span>` : ''}</td>
+          <td class="num">${formatDate(j.deadline)}</td>
+          <td>
+            ${appliedJobIds.has(j.id)
+              ? '<span class="stamp applied">Applied</span>'
+              : `<button class="btn btn-primary" style="padding:6px 14px;" onclick="apply(${j.id}, this)">Apply</button>`}
+          </td>
+        </tr>`).join('')
+      : '<tr><td colspan="5"><div class="empty-state"><span class="empty-icon">✦</span>No job postings yet. Check back soon.</div></td></tr>';
+
+    document.getElementById('appsBody').innerHTML = myApps.length
+      ? myApps.map((a) => `
+        <tr>
+          <td>${a.job ? a.job.title : 'Job removed'}</td>
+          <td>${a.job ? a.job.company : '-'}</td>
+          <td class="num">${formatDate(a.createdAt)}</td>
+          <td><span class="stamp ${a.status}">${a.status}</span></td>
+        </tr>`).join('')
+      : '<tr><td colspan="4" class="muted">You haven\'t applied to any jobs yet.</td></tr>';
+  }
+
+  async function apply(jobId, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Applying...';
+    try {
+      await api(`/jobs/${jobId}/apply`, { method: 'POST' });
+      loadAll();
+    } catch (err) {
+      alert(err.message);
+      btn.disabled = false;
+      btn.textContent = 'Apply';
+    }
+  }
+
+  loadAll();
+</script>
+</body>
+</html>

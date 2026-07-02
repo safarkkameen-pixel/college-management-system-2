@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CampusHub</title>
+</head>
+<body>
+  <script src="/js/api.js"></script>
+  <script>
+    const user = getUser();
+    if (user && getToken()) {
+      window.location.href = `/${user.role}/dashboard.html`;
+    } else {
+      window.location.href = '/login.html';
+    }
+  </script>
+</body>
+</html>

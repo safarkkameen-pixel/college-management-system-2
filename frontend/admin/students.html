@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Students - CampusHub</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside id="sidebar"></aside>
+  <main class="content">
+    <div class="topbar">
+      <h1>Students</h1>
+      <p class="muted">Create logins for students and keep their department assignments up to date.</p>
+    </div>
+
+    <div class="card">
+      <h3 id="formTitle">Add a student</h3>
+      <div id="alert" class="alert hidden"></div>
+      <form id="studentForm">
+        <input type="hidden" id="studentId">
+        <div class="grid-2">
+          <div>
+            <label>Full name</label>
+            <input type="text" id="name" required>
+            <label>Email (used to log in)</label>
+            <input type="email" id="email" required>
+            <label id="passwordLabel">Temporary password</label>
+            <input type="password" id="password" minlength="6" placeholder="Min. 6 characters">
+          </div>
+          <div>
+            <label>Department</label>
+            <select id="department" required></select>
+            <label>Roll number</label>
+            <input type="text" id="rollNo" placeholder="e.g. CSE010">
+            <label>Year</label>
+            <select id="year">
+              <option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option>
+            </select>
+            <label>Phone</label>
+            <input type="text" id="phone" placeholder="Optional">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:14px;">Save student</button>
+        <button type="button" class="btn btn-ghost hidden" id="cancelEdit">Cancel</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="inline-form" style="margin-bottom:16px;">
+        <select id="filterDept" style="max-width:220px;"><option value="">All departments</option></select>
+      </div>
+      <table class="table">
+        <thead><tr><th>Name</th><th>Roll No.</th><th>Dept</th><th>Year</th><th>Email</th><th>Actions</th></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+  requireAuth(['admin']);
+  renderSidebar('admin');
+
+  const form = document.getElementById('studentForm');
+  const cancelBtn = document.getElementById('cancelEdit');
+  let departments = [];
+
+  async function loadDepartmentOptions() {
+    departments = await api('/departments');
+    const options = departments.map((d) => `<option value="${d.code}">${d.name} (${d.code})</option>`).join('');
+    document.getElementById('department').innerHTML = options;
+    document.getElementById('filterDept').innerHTML = '<option value="">All departments</option>' + options;
+  }
+
+  async function loadStudents() {
+    const deptFilter = document.getElementById('filterDept').value;
+    const students = await api(`/students${deptFilter ? '?department=' + deptFilter : ''}`);
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = students.length
+      ? students.map((s) => `
+        <tr>
+          <td>${s.name}</td>
+          <td class="num">${s.rollNo}</td>
+          <td><span class="badge">${s.department}</span></td>
+          <td>${s.year || '-'}</td>
+          <td class="muted">${s.email}</td>
+          <td>
+            <button class="btn-icon" title="Edit" onclick='editStudent(${JSON.stringify(s)})'>✎</button>
+            <button class="btn-icon" title="Remove" onclick="deleteStudent(${s.id})">✕</button>
+          </td>
+        </tr>`).join('')
+      : '<tr><td colspan="6"><div class="empty-state"><span class="empty-icon">☻</span>No students match this filter.</div></td></tr>';
+  }
+
+  document.getElementById('filterDept').addEventListener('change', loadStudents);
+
+  function editStudent(s) {
+    document.getElementById('formTitle').textContent = `Edit ${s.name}`;
+    document.getElementById('studentId').value = s.id;
+    document.getElementById('name').value = s.name;
+    document.getElementById('email').value = s.email;
+    document.getElementById('email').disabled = true;
+    document.getElementById('password').required = false;
+    document.getElementById('password').placeholder = 'Leave blank - email/password can\'t be changed here';
+    document.getElementById('password').disabled = true;
+    document.getElementById('department').value = s.department;
+    document.getElementById('rollNo').value = s.rollNo || '';
+    document.getElementById('year').value = s.year || '1st Year';
+    document.getElementById('phone').value = s.phone || '';
+    cancelBtn.classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetForm() {
+    document.getElementById('formTitle').textContent = 'Add a student';
+    form.reset();
+    document.getElementById('studentId').value = '';
+    document.getElementById('email').disabled = false;
+    document.getElementById('password').disabled = false;
+    document.getElementById('password').required = true;
+    document.getElementById('password').placeholder = 'Min. 6 characters';
+    cancelBtn.classList.add('hidden');
+  }
+  cancelBtn.addEventListener('click', resetForm);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideAlert('alert');
+    const id = document.getElementById('studentId').value;
+    try {
+      if (id) {
+        await api(`/students/${id}`, {
+          method: 'PUT',
+          body: {
+            name: document.getElementById('name').value.trim(),
+            department: document.getElementById('department').value,
+            rollNo: document.getElementById('rollNo').value.trim(),
+            year: document.getElementById('year').value,
+            phone: document.getElementById('phone').value.trim()
+          }
+        });
+      } else {
+        await api('/students', {
+          method: 'POST',
+          body: {
+            name: document.getElementById('name').value.trim(),
+            email: document.getElementById('email').value.trim(),
+            password: document.getElementById('password').value,
+            department: document.getElementById('department').value,
+            rollNo: document.getElementById('rollNo').value.trim(),
+            year: document.getElementById('year').value,
+            phone: document.getElementById('phone').value.trim()
+          }
+        });
+      }
+      resetForm();
+      loadStudents();
+    } catch (err) {
+      showAlert('alert', err.message);
+    }
+  });
+
+  async function deleteStudent(id) {
+    if (!confirm('Remove this student and their login? This cannot be undone.')) return;
+    try {
+      await api(`/students/${id}`, { method: 'DELETE' });
+      loadStudents();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  (async () => {
+    try {
+      await loadDepartmentOptions();
+      await loadStudents();
+    } catch (err) {
+      showAlert('alert', err.message);
+    }
+  })();
+</script>
+</body>
+</html>
