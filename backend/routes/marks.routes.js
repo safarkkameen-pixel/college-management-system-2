@@ -55,7 +55,8 @@ router.put('/:id', verifyToken, authorize('tutor', 'admin'), async (req, res) =>
 router.get('/', verifyToken, authorize('tutor', 'admin'), async (req, res) => {
   const { department, subject } = req.query;
   const dept = department || req.user.department;
-  const studentIds = await store.find('students', s => s.department === dept).map(s => s.id);
+  const deptStudents = await store.find('students', s => s.department === dept);
+  const studentIds = deptStudents.map(s => s.id);
   let marks = await store.find('marks', m => studentIds.includes(m.studentId));
   if (subject) marks = marks.filter(m => m.subject === subject);
   res.json(marks);

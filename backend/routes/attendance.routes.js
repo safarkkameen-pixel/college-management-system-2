@@ -61,9 +61,8 @@ router.get('/student/:studentId', verifyToken, async (req, res) => {
     return res.status(403).json({ message: 'Access denied.' });
   }
 
-  const records = store
-    .find('attendance', a => a.studentId === student.id)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const rawRecords = await store.find('attendance', a => a.studentId === student.id);
+  const records = rawRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const subjects = [...new Set(records.map(r => r.subject))];
   const bySubject = subjects.map(subject => {

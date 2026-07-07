@@ -21,7 +21,8 @@ router.post('/', verifyToken, authorize('admin'), async (req, res) => {
 });
 
 router.get('/', verifyToken, async (req, res) => {
-  res.json(await store.getAll('jobs').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  const allJobs = await store.getAll('jobs');
+  res.json(allJobs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
 });
 
 // Specific routes are declared before the "/:id" routes below so that
